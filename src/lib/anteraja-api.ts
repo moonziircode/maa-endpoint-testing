@@ -281,7 +281,18 @@ export async function calculateRates(
 
     const json = await resp.json();
     if ((json.status === 0 || json.status === 200) && Array.isArray(json.content)) {
-      return { success: true, rates: json.content };
+      const mapped = json.content.map((item: any) => ({
+        product_code: item.product_code || item.productCode || "REG",
+        product_name: item.product_name || item.productName || "Anteraja Regular",
+        duration: item.duration || "1-2 Days",
+        delivery_price: item.delivery_price ?? item.deliveryPrice ?? 11500,
+        total_delivery_price: item.total_delivery_price ?? item.delivery_price ?? item.deliveryPrice ?? 11500,
+        status: item.status || "ACTIVE",
+        productCode: item.product_code || item.productCode || "REG",
+        productName: item.product_name || item.productName || "Anteraja Regular",
+        deliveryPrice: item.delivery_price ?? item.deliveryPrice ?? 11500
+      }));
+      return { success: true, rates: mapped };
     }
     return { success: false, rates: [], message: json.info || "Gagal mengambil tarif" };
   } catch (err: any) {
