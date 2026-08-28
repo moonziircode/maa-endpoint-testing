@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { getShipmentTracking } from "@/lib/anteraja-api";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest, { params }: { params: { awb: string } }) {
   const session = await getSession();
   if (!session) {
