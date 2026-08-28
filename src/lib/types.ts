@@ -123,3 +123,52 @@ export interface TrackingResult {
   receiverName: string;
   history: TrackingEvent[];
 }
+
+export interface MaaTaskItem {
+  taskCode: string;
+  waybillNo?: string;
+  bookingId?: string;
+  orderSource?: string;
+  productCode: string;
+  productName?: string;
+  taskStatus: string;
+  paymentStatus: string;
+  taskType: string;
+  deliveryPrice: number;
+  parcelTotalWeight: number;
+  shipperName: string;
+  shipperPhone: string;
+  shipperDistrict?: string;
+  receiverName: string;
+  receiverPhone: string;
+  receiverAddress?: string;
+  receiverDistrict?: string;
+  itemName?: string;
+  createdAt: string;
+  updatedAt?: string;
+  raw?: any;
+}
+
+export interface TasklistQueryOptions {
+  status?: string;
+  state?: string;
+  key?: string;
+  page?: number;
+  size?: number;
+  tab?: "dropoff" | "titip" | "tertunda" | "delivery" | "all";
+}
+
+export interface TasklistResult {
+  success: boolean;
+  tasks: MaaTaskItem[];
+  totalCount: number;
+  summary: {
+    outstandingPickup: number;
+    dropoffCount: number;
+    titipPickupCount: number;
+    tertundaCount: number;
+    deliveryCount: number;
+  };
+  message?: string;
+  raw?: any;
+}

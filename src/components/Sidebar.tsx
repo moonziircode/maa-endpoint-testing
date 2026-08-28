@@ -5,6 +5,7 @@ import Link from "next/navigation";
 import { usePathname, useRouter } from "next/navigation";
 import { 
   LayoutDashboard, 
+  ClipboardList,
   QrCode, 
   PackagePlus, 
   Truck, 
@@ -34,6 +35,7 @@ export function Sidebar({ user }: SidebarProps) {
 
   const menuItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Tasklist Paket", href: "/tasklist", icon: ClipboardList },
     { name: "Scan Paket", href: "/scan", icon: QrCode },
     { name: "Buat Order Manual", href: "/order/create", icon: PackagePlus },
     { name: "Tracking Shipment", href: "/tracking", icon: Truck },

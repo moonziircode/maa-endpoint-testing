@@ -1,4 +1,15 @@
-import { UserProfile, TariffItem, PromoResult, ScanResult, CreateOrderPayload, PaymentInitiateResult, TrackingResult } from "./types";
+import { 
+  UserProfile, 
+  TariffItem, 
+  PromoResult, 
+  ScanResult, 
+  CreateOrderPayload, 
+  PaymentInitiateResult, 
+  TrackingResult,
+  MaaTaskItem,
+  TasklistQueryOptions,
+  TasklistResult
+} from "./types";
 
 const CAS_URL = process.env.ANTERAJA_CAS_URL || "https://cas.anteraja.id";
 const API_URL = process.env.ANTERAJA_API_URL || "https://api.anteraja.id";
@@ -566,5 +577,107 @@ export async function getShipmentTracking(
     return null;
   } catch (err) {
     return null;
+  }
+}
+
+export async function getTasklist(
+  token: string,
+  options: TasklistQueryOptions = {}
+): Promise<TasklistResult> {
+  try {
+    const page = options.page ?? 0;
+    const size = options.size ?? 20;
+    const key = options.key ? options.key.trim() : "";
+    const status = options.status || "WAITING_FOR_HANDOVER_SERAH";
+    const state = options.state || "ACTIVE";
+
+    const params = new URLSearchParams({
+      status,
+      state,
+      page: String(page),
+      size: String(size)
+    });
+    if (key) {
+      params.append("key", key);
+    }
+
+    const resp = await fetch(`${API_URL}/maa-task/task/dropoff?${params.toString()}`, {
+      headers: {
+        "token": token,
+        "Authorization": `Bearer ${token}`,
+        "appKey": "MAA",
+        "appSecret": "santuy",
+        "deviceId": "b6a8a44b-4c4f-4d43-a6cf-82e7b512e091",
+        "User-Agent": "okhttp/4.9.0"
+      }
+    });
+
+    const json = await resp.json();
+    let tasks: MaaTaskItem[] = [];
+    const content = json.content;
+
+    if ((json.status === 0 || json.status === 200) && content) {
+      const rawList = Array.isArray(content)
+        ? content
+        : Array.isArray(content.list)
+        ? content.list
+        : Array.isArray(content.tasks)
+        ? content.tasks
+        : [];
+
+      tasks = rawList.map((item: any) => ({
+        taskCode: item.task_code || item.taskCode || "",
+        waybillNo: item.waybill_no || item.waybillNo || item.waybill || "",
+        bookingId: item.booking_id || item.bookingId || "",
+        orderSource: item.order_source || item.orderSource || "MAA",
+        productCode: item.product_code || item.productCode || "REG",
+        productName: item.product_name || item.productName || "Anteraja Regular",
+        taskStatus: item.task_status || item.taskStatus || item.status || "WAITING_FOR_HANDOVER_SERAH",
+        paymentStatus: item.payment_status || item.paymentStatus || "PAID",
+        taskType: item.task_type || item.taskType || "DROPOFF",
+        deliveryPrice: item.total_delivery_price ?? item.delivery_price ?? 11500,
+        parcelTotalWeight: item.parcel_total_weight ?? item.weight ?? 1.0,
+        shipperName: item.shipper_info?.name || item.shipperName || "Sender",
+        shipperPhone: item.shipper_info?.phone || item.shipperPhone || "-",
+        shipperDistrict: item.shipper_info?.district_code || item.shipperDistrict || "",
+        receiverName: item.receiver_info?.name || item.receiverName || "Receiver",
+        receiverPhone: item.receiver_info?.phone || item.receiverPhone || "-",
+        receiverAddress: item.receiver_info?.address || item.receiverAddress || "",
+        receiverDistrict: item.receiver_info?.district_code || item.receiverDistrict || "",
+        itemName: Array.isArray(item.items) && item.items.length > 0 ? item.items[0].item_name : (item.itemName || "Paket Barang"),
+        createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+        updatedAt: item.updated_at || item.updatedAt || "",
+        raw: item
+      }));
+    }
+
+    return {
+      success: true,
+      tasks,
+      totalCount: tasks.length,
+      summary: {
+        outstandingPickup: tasks.length,
+        dropoffCount: tasks.filter(t => t.taskType === "DROPOFF").length || tasks.length,
+        titipPickupCount: tasks.filter(t => t.taskType === "TITIP_PICKUP").length,
+        tertundaCount: tasks.filter(t => t.taskStatus === "ON_HOLD" || t.paymentStatus === "NOT_PAID").length,
+        deliveryCount: tasks.filter(t => t.taskType === "DELIVERY").length
+      },
+      raw: json
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      tasks: [],
+      totalCount: 0,
+      summary: {
+        outstandingPickup: 0,
+        dropoffCount: 0,
+        titipPickupCount: 0,
+        tertundaCount: 0,
+        deliveryCount: 0
+      },
+      message: err.message,
+      raw: { error: err.message }
+    };
   }
 }
