@@ -3,17 +3,18 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, User, ShieldCheck, AlertCircle, Loader2 } from "lucide-react";
+import { ErrorModal, ErrorDetail } from "@/components/ErrorModal";
 
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("50004786");
   const [password, setPassword] = useState("aa12345");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [errorDetail, setErrorDetail] = useState<ErrorDetail | null>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setErrorDetail(null);
     setLoading(true);
 
     try {
@@ -28,10 +29,25 @@ export default function LoginPage() {
         router.push("/dashboard");
         router.refresh();
       } else {
-        setError(data.error || "Login gagal. Silakan periksa kembali NIA dan password.");
+        const rawErr = data.error || "Login gagal";
+        setErrorDetail({
+          title: "Kendala Autentikasi CAS SSO",
+          message: rawErr,
+          endpoint: "POST /api/auth/login",
+          statusCode: resp.status,
+          rawDetails: data,
+          timestamp: new Date().toISOString()
+        });
       }
     } catch (err: any) {
-      setError(err.message || "Gagal menghubungi server");
+      setErrorDetail({
+        title: "Kendala Jaringan / Server",
+        message: err.message || String(err),
+        endpoint: "POST /api/auth/login",
+        statusCode: "Network / Client Error",
+        rawDetails: { error: err.message || String(err) },
+        timestamp: new Date().toISOString()
+      });
     } finally {
       setLoading(false);
     }
@@ -49,14 +65,28 @@ export default function LoginPage() {
           <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-semibold">Mitra Agent Portal Web</p>
         </div>
 
-        {/* Error Alert */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-3 text-red-700 text-xs">
-            <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <span className="font-bold block">Autentikasi Gagal</span>
-              <span>{error}</span>
+        {/* Error Alert Inline with Click for Details */}
+        {errorDetail && (
+          <div 
+            onClick={() => {}}
+            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start justify-between space-x-3 text-red-800 text-xs shadow-sm"
+          >
+            <div className="flex items-start space-x-2.5 min-w-0">
+              <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <span className="font-bold block text-red-900">Autentikasi Gagal (HTTP {errorDetail.statusCode})</span>
+                <span className="font-mono break-words">{errorDetail.message}</span>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(JSON.stringify(errorDetail, null, 2));
+              }}
+              className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded font-semibold text-[10px] flex-shrink-0 transition-colors"
+            >
+              Salin
+            </button>
           </div>
         )}
 
@@ -122,6 +152,20 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Pop-up Modal Error Detail */}
+      {errorDetail && (
+        <ErrorModal
+          isOpen={Boolean(errorDetail)}
+          onClose={() => setErrorDetail(null)}
+          title={errorDetail.title}
+          message={errorDetail.message}
+          endpoint={errorDetail.endpoint}
+          statusCode={errorDetail.statusCode}
+          rawDetails={errorDetail.rawDetails}
+          timestamp={errorDetail.timestamp}
+        />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Navbar } from "@/components/Navbar";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 import { UserProfile, ScanResult } from "@/lib/types";
+import { ErrorModal, ErrorDetail } from "@/components/ErrorModal";
 import { 
   CheckCircle2, 
   AlertTriangle, 
@@ -14,13 +15,15 @@ import {
   MapPin, 
   DollarSign,
   Clock,
-  ShieldAlert
+  ShieldAlert,
+  Copy
 } from "lucide-react";
 
 export default function ScanPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [errorDetail, setErrorDetail] = useState<ErrorDetail | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -33,6 +36,7 @@ export default function ScanPage() {
   const handleScan = async (awb: string) => {
     setLoading(true);
     setResult(null);
+    setErrorDetail(null);
     try {
       const resp = await fetch("/api/scan", {
         method: "POST",
@@ -41,11 +45,31 @@ export default function ScanPage() {
       });
       const data = await resp.json();
       setResult(data);
+
+      if (data.status === "ERROR") {
+        setErrorDetail({
+          title: "Kendala Scan / Validasi AWB",
+          message: data.message || "Scan error",
+          endpoint: "POST /api/scan",
+          statusCode: resp.status,
+          rawDetails: data,
+          timestamp: new Date().toISOString()
+        });
+      }
     } catch (e: any) {
-      setResult({
+      const errObj = {
         awb,
-        status: "ERROR",
+        status: "ERROR" as const,
         message: e.message || "Gagal menghubungi server scan"
+      };
+      setResult(errObj);
+      setErrorDetail({
+        title: "Kendala Jaringan Scan",
+        message: e.message || String(e),
+        endpoint: "POST /api/scan",
+        statusCode: "Network / Client Error",
+        rawDetails: { error: e.message || String(e) },
+        timestamp: new Date().toISOString()
       });
     } finally {
       setLoading(false);
@@ -79,7 +103,7 @@ export default function ScanPage() {
                     <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0" />
                     <div>
                       <span className="font-bold text-sm block">AWB Valid & Siap Diproses</span>
-                      <span className="text-xs text-emerald-700">{result.message}</span>
+                      <span className="text-xs text-emerald-700 font-mono">{result.message}</span>
                     </div>
                   </div>
                   <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-mono font-bold rounded-full">
@@ -94,7 +118,7 @@ export default function ScanPage() {
                     <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
                     <div>
                       <span className="font-bold text-sm block">Order Telah Diklaim Sebelumnya</span>
-                      <span className="text-xs text-amber-700">{result.message}</span>
+                      <span className="text-xs text-amber-700 font-mono">{result.message}</span>
                     </div>
                   </div>
                   <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-mono font-bold rounded-full">
@@ -104,12 +128,60 @@ export default function ScanPage() {
               )}
 
               {result.status === "NOT_FOUND" && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center space-x-3 text-red-800">
-                  <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
-                  <div>
-                    <span className="font-bold text-sm block">AWB Tidak Ditemukan</span>
-                    <span className="text-xs text-red-700">{result.message}</span>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-red-800">
+                  <div className="flex items-center space-x-3">
+                    <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                    <div>
+                      <span className="font-bold text-sm block">AWB Tidak Ditemukan</span>
+                      <span className="text-xs text-red-700 font-mono">{result.message}</span>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorDetail({
+                        title: "Detail AWB Tidak Ditemukan",
+                        message: result.message || "AWB Tidak Ditemukan",
+                        endpoint: `GET /maa-task/order/v2/search/${result.awb}`,
+                        statusCode: 404,
+                        rawDetails: result,
+                        timestamp: new Date().toISOString()
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-xl font-semibold text-xs transition-colors flex items-center space-x-1"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Salin Kendala</span>
+                  </button>
+                </div>
+              )}
+
+              {result.status === "ERROR" && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-red-800">
+                  <div className="flex items-center space-x-3">
+                    <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                    <div>
+                      <span className="font-bold text-sm block">Gagal Memproses AWB</span>
+                      <span className="text-xs text-red-700 font-mono">{result.message}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorDetail({
+                        title: "Detail Error Scan AWB",
+                        message: result.message || "Error",
+                        endpoint: "POST /api/scan",
+                        statusCode: 500,
+                        rawDetails: result,
+                        timestamp: new Date().toISOString()
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-xl font-semibold text-xs transition-colors flex items-center space-x-1"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Salin Kendala</span>
+                  </button>
                 </div>
               )}
 
@@ -181,6 +253,20 @@ export default function ScanPage() {
           )}
         </main>
       </div>
+
+      {/* Pop-up Modal Error Detail */}
+      {errorDetail && (
+        <ErrorModal
+          isOpen={Boolean(errorDetail)}
+          onClose={() => setErrorDetail(null)}
+          title={errorDetail.title}
+          message={errorDetail.message}
+          endpoint={errorDetail.endpoint}
+          statusCode={errorDetail.statusCode}
+          rawDetails={errorDetail.rawDetails}
+          timestamp={errorDetail.timestamp}
+        />
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { DistrictSelector } from "@/components/DistrictSelector";
 import { QRCodeDisplay } from "@/components/QRCodeDisplay";
 import { UserProfile, District, TariffItem } from "@/lib/types";
+import { ErrorModal, ErrorDetail } from "@/components/ErrorModal";
 import { 
   PackagePlus, 
   Calculator, 
@@ -15,7 +16,8 @@ import {
   AlertCircle, 
   Loader2,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Copy
 } from "lucide-react";
 
 export default function CreateOrderPage() {
@@ -54,7 +56,7 @@ export default function CreateOrderPage() {
   const [paymentData, setPaymentData] = useState<any>(null);
   const [isPaid, setIsPaid] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
-  const [orderError, setOrderError] = useState("");
+  const [errorDetail, setErrorDetail] = useState<ErrorDetail | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -72,6 +74,7 @@ export default function CreateOrderPage() {
   const handleCalculateRates = async () => {
     setLoadingRates(true);
     setRates([]);
+    setErrorDetail(null);
     try {
       const resp = await fetch("/api/order/rate", {
         method: "POST",
@@ -91,9 +94,25 @@ export default function CreateOrderPage() {
         if (data.rates && data.rates.length > 0) {
           setProductCode(data.rates[0].product_code);
         }
+      } else {
+        setErrorDetail({
+          title: "Kendala Perhitungan Ongkir",
+          message: data.error || data.message || "Gagal mengambil tarif dari Anteraja Gateway",
+          endpoint: "POST /api/order/rate",
+          statusCode: resp.status,
+          rawDetails: data,
+          timestamp: new Date().toISOString()
+        });
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setErrorDetail({
+        title: "Kendala Jaringan Hitung Tarif",
+        message: e.message || String(e),
+        endpoint: "POST /api/order/rate",
+        statusCode: "Network / Client Error",
+        rawDetails: { error: e.message || String(e) },
+        timestamp: new Date().toISOString()
+      });
     } finally {
       setLoadingRates(false);
     }
@@ -114,9 +133,25 @@ export default function CreateOrderPage() {
       } else {
         setDiscount(0);
         setPromoMessage(data.message);
+        setErrorDetail({
+          title: "Kendala Kupon Promo",
+          message: data.message || "Kode promo tidak valid atau telah kedaluwarsa",
+          endpoint: "POST /api/order/promo",
+          statusCode: resp.status,
+          rawDetails: data,
+          timestamp: new Date().toISOString()
+        });
       }
     } catch (e: any) {
       setPromoMessage(e.message);
+      setErrorDetail({
+        title: "Kendala Validasi Promo",
+        message: e.message || String(e),
+        endpoint: "POST /api/order/promo",
+        statusCode: "Network / Client Error",
+        rawDetails: { error: e.message || String(e) },
+        timestamp: new Date().toISOString()
+      });
     }
   };
 
@@ -127,7 +162,7 @@ export default function CreateOrderPage() {
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
-    setOrderError("");
+    setErrorDetail(null);
 
     try {
       // Step 1: Create Dropoff Task
@@ -156,7 +191,16 @@ export default function CreateOrderPage() {
 
       const dropData = await dropResp.json();
       if (!dropData.success || !dropData.taskCode) {
-        throw new Error(dropData.message || "Gagal membuat order dropoff");
+        const rawErrMsg = dropData.error || dropData.message || "Gagal membuat order dropoff di Anteraja Gateway";
+        setErrorDetail({
+          title: "Kendala Pembuatan Order Dropoff",
+          message: rawErrMsg,
+          endpoint: "POST /api/order/create",
+          statusCode: dropResp.status,
+          rawDetails: dropData,
+          timestamp: new Date().toISOString()
+        });
+        return;
       }
 
       const generatedTaskCode = dropData.taskCode;
@@ -176,12 +220,28 @@ export default function CreateOrderPage() {
 
       const payData = await payResp.json();
       if (!payData.success) {
-        throw new Error(payData.message || "Gagal generate QR pembayaran");
+        const rawErrMsg = payData.error || payData.message || "Gagal inisiasi pembayaran QR";
+        setErrorDetail({
+          title: "Kendala Inisiasi QRIS Pembayaran",
+          message: rawErrMsg,
+          endpoint: "POST /api/order/payment/initiate",
+          statusCode: payResp.status,
+          rawDetails: payData,
+          timestamp: new Date().toISOString()
+        });
+        return;
       }
 
       setPaymentData(payData);
     } catch (err: any) {
-      setOrderError(err.message || "Terjadi kesalahan saat memproses order");
+      setErrorDetail({
+        title: "Kendala Jaringan Proses Order",
+        message: err.message || String(err),
+        endpoint: "POST /api/order/create",
+        statusCode: "Network / Client Error",
+        rawDetails: { error: err.message || String(err) },
+        timestamp: new Date().toISOString()
+      });
     } finally {
       setCreating(false);
     }
@@ -221,10 +281,26 @@ export default function CreateOrderPage() {
             </p>
           </div>
 
-          {orderError && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-3 text-red-700 text-xs">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-              <span>{orderError}</span>
+          {/* Inline Error Alert with Copy Button */}
+          {errorDetail && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start justify-between space-x-3 text-red-800 text-xs shadow-sm">
+              <div className="flex items-start space-x-2.5 min-w-0">
+                <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <span className="font-bold block text-red-900">{errorDetail.title} ({errorDetail.statusCode})</span>
+                  <span className="font-mono break-words">{errorDetail.message}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(errorDetail, null, 2));
+                }}
+                className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg font-semibold text-xs flex items-center space-x-1 flex-shrink-0 transition-colors"
+              >
+                <Copy className="w-3 h-3" />
+                <span>Salin</span>
+              </button>
             </div>
           )}
 
@@ -504,7 +580,7 @@ export default function CreateOrderPage() {
                   <CheckCircle2 className="w-6 h-6 text-emerald-600" />
                   <div>
                     <span className="font-bold text-sm block">Task Order Berhasil Dibuat!</span>
-                    <span className="text-xs text-emerald-700">
+                    <span className="text-xs text-emerald-700 font-mono">
                       Task Code: <strong>{taskCode}</strong> &bull; Silakan bayar menggunakan GoPay / BCA / QRIS
                     </span>
                   </div>
@@ -537,6 +613,20 @@ export default function CreateOrderPage() {
           )}
         </main>
       </div>
+
+      {/* Pop-up Modal Error Detail */}
+      {errorDetail && (
+        <ErrorModal
+          isOpen={Boolean(errorDetail)}
+          onClose={() => setErrorDetail(null)}
+          title={errorDetail.title}
+          message={errorDetail.message}
+          endpoint={errorDetail.endpoint}
+          statusCode={errorDetail.statusCode}
+          rawDetails={errorDetail.rawDetails}
+          timestamp={errorDetail.timestamp}
+        />
+      )}
     </div>
   );
 }

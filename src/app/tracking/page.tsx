@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Navbar } from "@/components/Navbar";
 import { UserProfile, TrackingResult } from "@/lib/types";
 import { getOpcodeDescription } from "@/lib/opcode-map";
+import { ErrorModal, ErrorDetail } from "@/components/ErrorModal";
 import { 
   Truck, 
   Search, 
@@ -14,7 +15,8 @@ import {
   User, 
   Package, 
   AlertCircle,
-  Loader2
+  Loader2,
+  Copy
 } from "lucide-react";
 
 export default function TrackingPage() {
@@ -22,7 +24,7 @@ export default function TrackingPage() {
   const [awb, setAwb] = useState("11004249108088");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TrackingResult | null>(null);
-  const [error, setError] = useState("");
+  const [errorDetail, setErrorDetail] = useState<ErrorDetail | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -37,7 +39,7 @@ export default function TrackingPage() {
     if (!awb.trim()) return;
 
     setLoading(true);
-    setError("");
+    setErrorDetail(null);
     setResult(null);
 
     try {
@@ -46,10 +48,25 @@ export default function TrackingPage() {
       if (data.success) {
         setResult(data);
       } else {
-        setError(data.error || "Nomor AWB tidak ditemukan");
+        const rawErrMsg = data.error || data.message || "Nomor AWB tidak ditemukan di gateway Anteraja";
+        setErrorDetail({
+          title: "Kendala Pelacakan Resi / Tracking",
+          message: rawErrMsg,
+          endpoint: `GET /api/tracking/${awb.trim()}`,
+          statusCode: resp.status,
+          rawDetails: data,
+          timestamp: new Date().toISOString()
+        });
       }
     } catch (err: any) {
-      setError(err.message || "Gagal menghubungi server tracking");
+      setErrorDetail({
+        title: "Kendala Jaringan Tracking",
+        message: err.message || String(err),
+        endpoint: `GET /api/tracking/${awb.trim()}`,
+        statusCode: "Network / Client Error",
+        rawDetails: { error: err.message || String(err) },
+        timestamp: new Date().toISOString()
+      });
     } finally {
       setLoading(false);
     }
@@ -95,10 +112,26 @@ export default function TrackingPage() {
             </form>
           </div>
 
-          {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-3 text-red-700 text-xs">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-              <span>{error}</span>
+          {/* Inline Error Alert with Copy Button */}
+          {errorDetail && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start justify-between space-x-3 text-red-800 text-xs shadow-sm">
+              <div className="flex items-start space-x-2.5 min-w-0">
+                <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <span className="font-bold block text-red-900">{errorDetail.title} ({errorDetail.statusCode})</span>
+                  <span className="font-mono break-words">{errorDetail.message}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(errorDetail, null, 2));
+                }}
+                className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg font-semibold text-xs flex items-center space-x-1 flex-shrink-0 transition-colors"
+              >
+                <Copy className="w-3 h-3" />
+                <span>Salin</span>
+              </button>
             </div>
           )}
 
@@ -176,6 +209,20 @@ export default function TrackingPage() {
           )}
         </main>
       </div>
+
+      {/* Pop-up Modal Error Detail */}
+      {errorDetail && (
+        <ErrorModal
+          isOpen={Boolean(errorDetail)}
+          onClose={() => setErrorDetail(null)}
+          title={errorDetail.title}
+          message={errorDetail.message}
+          endpoint={errorDetail.endpoint}
+          statusCode={errorDetail.statusCode}
+          rawDetails={errorDetail.rawDetails}
+          timestamp={errorDetail.timestamp}
+        />
+      )}
     </div>
   );
 }
