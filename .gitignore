@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+
+# Next.js build output
+.next/
+out/
+build/
+dist/
+
+# Misc
+.DS_Store
+*.pem
+*.log
+
+# Sensitive environment variables (Rule: Do not commit secrets)
+.env*.local
+.env
+
+# TypeScript
+*.tsbuildinfo
+
+# Decompiled APK unpacked dump
+unpacked/
