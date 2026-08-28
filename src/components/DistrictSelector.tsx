@@ -23,11 +23,14 @@ export function DistrictSelector({
   const [results, setResults] = useState<District[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const lastSelectedCode = useRef<string>(value || "");
 
   useEffect(() => {
     if (initialDistrict && !query) {
       setQuery(`${initialDistrict.dist_name}, ${initialDistrict.city_name}`);
+      lastSelectedCode.current = initialDistrict.dist_code;
     }
   }, [initialDistrict]);
 
@@ -41,29 +44,44 @@ export function DistrictSelector({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSearch = async (kw: string) => {
-    setQuery(kw);
-    if (!kw || kw.trim().length < 2) {
+  // 350ms Debounced search effect
+  useEffect(() => {
+    if (!isTyping) return;
+
+    const trimmed = query.trim();
+    if (!trimmed || trimmed.length < 2) {
       setResults([]);
+      setLoading(false);
       return;
     }
 
     setLoading(true);
-    setOpen(true);
-    try {
-      const res = await fetch(`/api/districts?q=${encodeURIComponent(kw)}&limit=8`);
-      const data = await res.json();
-      if (data.success) {
-        setResults(data.districts || []);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/districts?q=${encodeURIComponent(trimmed)}&limit=8`);
+        const data = await res.json();
+        if (data.success) {
+          setResults(data.districts || []);
+          setOpen(true);
+        }
+      } catch (e) {
+        console.error("[DistrictSelector search error]:", e);
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [query, isTyping]);
+
+  const handleInputChange = (val: string) => {
+    setIsTyping(true);
+    setQuery(val);
   };
 
   const handleSelect = (dist: District) => {
+    setIsTyping(false);
+    lastSelectedCode.current = dist.dist_code;
     setQuery(`${dist.dist_name}, ${dist.city_name} (${dist.dist_code})`);
     setOpen(false);
     onChange(dist);
@@ -76,7 +94,7 @@ export function DistrictSelector({
         <input
           type="text"
           value={query}
-          onChange={(e) => handleSearch(e.target.value)}
+          onChange={(e) => handleInputChange(e.target.value)}
           onFocus={() => { if (results.length > 0) setOpen(true); }}
           placeholder={placeholder}
           className="w-full pl-9 pr-8 py-2.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"

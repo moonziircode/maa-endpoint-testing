@@ -1,33 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchDistricts, getDistrictByCode, getSupabaseClient } from "@/lib/supabase";
+import { searchDistricts, getDistrictByCode } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const q = searchParams.get("q");
-  const code = searchParams.get("code");
-  const limit = parseInt(searchParams.get("limit") || "10", 10);
+  try {
+    const { searchParams } = new URL(req.url);
+    const q = searchParams.get("q");
+    const code = searchParams.get("code");
+    const rawLimit = searchParams.get("limit");
+    const limit = rawLimit ? Math.min(Math.max(1, parseInt(rawLimit, 10) || 8), 50) : 8;
 
-  // Check if client is configured
-  const client = getSupabaseClient();
-  if (!client) {
+    if (code) {
+      const district = await getDistrictByCode(code);
+      if (!district) {
+        return NextResponse.json({ success: true, district: null, message: "Kecamatan tidak ditemukan" });
+      }
+      return NextResponse.json({ success: true, district });
+    }
+
+    if (!q || q.trim().length < 2) {
+      return NextResponse.json({ success: true, districts: [] });
+    }
+
+    const districts = await searchDistricts(q, limit);
+    return NextResponse.json({ success: true, districts });
+  } catch (err: any) {
     return NextResponse.json({
       success: false,
-      error: "Supabase client is not configured. Please set NEXT_PUBLIC_SUPABASE_ANON_KEY in environment variables.",
+      error: err?.message || "Terjadi kesalahan pada query master kecamatan",
       districts: []
-    }, { status: 503 });
+    }, { status: 500 });
   }
-
-  if (code) {
-    const district = await getDistrictByCode(code);
-    return NextResponse.json({ success: true, district });
-  }
-
-  if (!q) {
-    return NextResponse.json({ success: true, districts: [] });
-  }
-
-  const districts = await searchDistricts(q, limit);
-  return NextResponse.json({ success: true, districts });
 }

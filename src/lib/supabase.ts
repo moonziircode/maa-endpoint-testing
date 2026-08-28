@@ -2,6 +2,8 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { District } from "./types";
 
 const DEFAULT_SUPABASE_URL = "https://wqpomgyktrndktsmojqg.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxcG9tZ3lrdHJuZGt0c21vanFnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4ODM4NDUsImV4cCI6MjEwMzQ1OTg0NX0.fcL8R8Jkw-XRaXFVD0Is3EexG-jBaGYK0pbfB2gQQdE";
 
 function getSupabaseUrl(): string {
   return (
@@ -11,64 +13,49 @@ function getSupabaseUrl(): string {
   );
 }
 
-function getSupabaseKey(): string | null {
+function getSupabaseKey(): string {
   // Least privilege: Prioritize public anon key for reading public districts
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SECRET_KEY;
+    process.env.SUPABASE_SECRET_KEY ||
+    DEFAULT_SUPABASE_ANON_KEY;
 
-  if (!key || key.trim() === "") {
-    return null;
-  }
   return key.trim();
 }
 
 let cachedClient: SupabaseClient | null = null;
 
-export function getSupabaseClient(): SupabaseClient | null {
+export function getSupabaseClient(): SupabaseClient {
   if (cachedClient) return cachedClient;
 
   const url = getSupabaseUrl();
   const key = getSupabaseKey();
 
-  if (!key) {
-    // Return null safely during build / unconfigured CI environment
-    return null;
-  }
-
-  try {
-    cachedClient = createClient(url, key, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-    return cachedClient;
-  } catch (err) {
-    console.error("[Supabase initialization error]:", err);
-    return null;
-  }
+  cachedClient = createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+  return cachedClient;
 }
 
-export async function searchDistricts(keyword: string, limit: number = 10): Promise<District[]> {
+export async function searchDistricts(keyword: string, limit: number = 8): Promise<District[]> {
   try {
     const trimmed = keyword.trim();
-    if (!trimmed) return [];
+    if (!trimmed || trimmed.length < 2) return [];
 
     const client = getSupabaseClient();
-    if (!client) {
-      console.warn("[Supabase searchDistricts]: Client unconfigured. Missing NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-      return [];
-    }
+    const safeLimit = Math.min(Math.max(1, limit), 50);
 
     const { data, error } = await client
       .from("districts")
       .select("id, dist_code, dist_name, city_code, city_name, province_code, province_name, postal_code, dist_all")
       .or(`dist_name.ilike.%${trimmed}%,city_name.ilike.%${trimmed}%,postal_code.ilike.%${trimmed}%,dist_all.ilike.%${trimmed}%`)
-      .limit(limit);
+      .limit(safeLimit);
 
     if (error) {
       console.error("[Supabase searchDistricts error]:", error.message);
@@ -87,11 +74,6 @@ export async function getDistrictByCode(code: string): Promise<District | null> 
     if (!trimmed) return null;
 
     const client = getSupabaseClient();
-    if (!client) {
-      console.warn("[Supabase getDistrictByCode]: Client unconfigured. Missing NEXT_PUBLIC_SUPABASE_ANON_KEY.");
-      return null;
-    }
-
     const { data, error } = await client
       .from("districts")
       .select("*")
