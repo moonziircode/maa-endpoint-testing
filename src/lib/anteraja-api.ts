@@ -372,7 +372,7 @@ export async function createDropoffOrder(
     const dropoffReq = [
       {
         product_code: payload.productCode || "REG",
-        delivery_price: 11500.0,
+        delivery_price: payload.deliveryPrice ? Number(payload.deliveryPrice) : 11500.0,
         parcel_total_weight: payload.weight || 1.0,
         agent_staff_id: staffId,
         shipper_info: {

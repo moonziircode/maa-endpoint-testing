@@ -71,9 +71,14 @@ export default function CreateOrderPage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (senderDistrict && receiverDistrict) {
+      handleCalculateRates();
+    }
+  }, [senderDistrict, receiverDistrict, weight, length, width, height]);
+
   const handleCalculateRates = async () => {
     setLoadingRates(true);
-    setRates([]);
     setErrorDetail(null);
     try {
       const resp = await fetch("/api/order/rate", {
@@ -92,7 +97,10 @@ export default function CreateOrderPage() {
       if (data.success) {
         setRates(data.rates || []);
         if (data.rates && data.rates.length > 0) {
-          setProductCode(data.rates[0].product_code);
+          const currentExists = data.rates.some((r: any) => r.product_code === productCode);
+          if (!currentExists) {
+            setProductCode(data.rates[0].product_code);
+          }
         }
       } else {
         setErrorDetail({
@@ -165,7 +173,7 @@ export default function CreateOrderPage() {
     setErrorDetail(null);
 
     try {
-      // Step 1: Create Dropoff Task
+      // Step 1: Create Dropoff Task with selected service rate
       const dropResp = await fetch("/api/order/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -185,7 +193,8 @@ export default function CreateOrderPage() {
           length,
           width,
           height,
-          productCode
+          productCode,
+          deliveryPrice: baseShippingFee
         })
       });
 
@@ -205,14 +214,17 @@ export default function CreateOrderPage() {
 
       const generatedTaskCode = dropData.taskCode;
       setTaskCode(generatedTaskCode);
+      const actualPayableAmount = dropData.deliveryPrice 
+        ? Math.max(0, dropData.deliveryPrice - discount) 
+        : finalAmount;
 
-      // Step 2: Initiate QR Payment
+      // Step 2: Initiate QR Payment using real backend payable amount
       const payResp = await fetch("/api/order/payment/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           taskCode: generatedTaskCode,
-          amount: finalAmount,
+          amount: actualPayableAmount,
           promoCode,
           paymentCode: "006"
         })

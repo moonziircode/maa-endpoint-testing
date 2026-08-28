@@ -86,6 +86,7 @@ export interface CreateOrderPayload {
   width?: number;
   height?: number;
   productCode: string;
+  deliveryPrice?: number;
   promoCode?: string;
   isCod?: boolean;
   codAmount?: number;
