@@ -213,7 +213,7 @@ export async function scanAndValidateAWB(token: string, staffId: string, awb: st
     const v1Resp = await fetch(v1Url, { headers });
     const v1Json = await v1Resp.json();
 
-    if (v1Json.status === 200 && v1Json.content && v1Json.content.length > 0) {
+    if ((v1Json.status === 0 || v1Json.status === 200) && v1Json.content && v1Json.content.length > 0) {
       const order = v1Json.content[0];
       return {
         awb: cleanAwb,
@@ -280,7 +280,7 @@ export async function calculateRates(
     });
 
     const json = await resp.json();
-    if (json.status === 200 && Array.isArray(json.content)) {
+    if ((json.status === 0 || json.status === 200) && Array.isArray(json.content)) {
       return { success: true, rates: json.content };
     }
     return { success: false, rates: [], message: json.info || "Gagal mengambil tarif" };
@@ -310,7 +310,7 @@ export async function validatePromoCode(
     });
 
     const json = await resp.json();
-    if (json.status === 200 && json.content) {
+    if ((json.status === 0 || json.status === 200) && json.content) {
       return {
         valid: true,
         promoCode: json.content.promo_code || promoCode,
@@ -398,7 +398,7 @@ export async function createDropoffOrder(
     });
 
     const json = await resp.json();
-    if (json.status === 200 && json.content) {
+    if ((json.status === 0 || json.status === 200) && json.content) {
       return {
         success: true,
         taskCode: json.content.task_code,
@@ -440,7 +440,7 @@ export async function initiatePayment(
     });
 
     const json = await resp.json();
-    if (json.status === 200 && json.content) {
+    if ((json.status === 0 || json.status === 200) && json.content) {
       const c = json.content;
       return {
         success: true,
