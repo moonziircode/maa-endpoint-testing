@@ -10,8 +10,41 @@ interface CasLoginResult {
   error?: string;
 }
 
+function extractCookies(resp: Response, prevCookies: string = ""): string {
+  const cookieMap = new Map<string, string>();
+  
+  if (prevCookies) {
+    for (const part of prevCookies.split(";")) {
+      const trimmed = part.trim();
+      if (trimmed) {
+        const [k, v] = trimmed.split("=");
+        if (k) cookieMap.set(k.trim(), v ? v.trim() : "");
+      }
+    }
+  }
+
+  const rawSetCookie = typeof (resp.headers as any).getSetCookie === "function"
+    ? (resp.headers as any).getSetCookie()
+    : [resp.headers.get("set-cookie")].filter(Boolean);
+
+  for (const item of rawSetCookie) {
+    if (typeof item === "string") {
+      const firstPart = item.split(";")[0].trim();
+      if (firstPart) {
+        const [k, v] = firstPart.split("=");
+        if (k) cookieMap.set(k.trim(), v ? v.trim() : "");
+      }
+    }
+  }
+
+  return Array.from(cookieMap.entries())
+    .map(([k, v]) => `${k}=${v}`)
+    .join("; ");
+}
+
 export async function loginCAS(username: string, password: string): Promise<CasLoginResult> {
   try {
+    const cleanUsername = username.trim();
     // Step 1: GET CAS Login headers to extract lt and execution
     const initialResp = await fetch(`${CAS_URL}/cas/login?isapp=true&acctype=emp`, {
       headers: {
@@ -22,11 +55,11 @@ export async function loginCAS(username: string, password: string): Promise<CasL
 
     const lt = initialResp.headers.get("lt") || "";
     const execution = initialResp.headers.get("execution") || "";
-    const rawCookies1 = initialResp.headers.get("set-cookie") || "";
+    const cookies1 = extractCookies(initialResp);
 
     // Step 2: POST credentials to CAS
     const bodyParams = new URLSearchParams();
-    bodyParams.append("username", username.trim());
+    bodyParams.append("username", cleanUsername);
     bodyParams.append("password", password);
     bodyParams.append("lt", lt);
     bodyParams.append("execution", execution);
@@ -38,19 +71,19 @@ export async function loginCAS(username: string, password: string): Promise<CasL
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "User-Agent": "okhttp/4.9.0",
-        "Cookie": rawCookies1
+        "Cookie": cookies1
       },
       body: bodyParams.toString(),
       redirect: "manual"
     });
 
-    const rawCookies2 = loginResp.headers.get("set-cookie") || rawCookies1;
+    const cookies2 = extractCookies(loginResp, cookies1);
 
     // Step 3: Request Service Ticket for https://api.anteraja.id
     const serviceUrl = encodeURIComponent("https://api.anteraja.id");
     const stResp = await fetch(`${CAS_URL}/cas/login?service=${serviceUrl}`, {
       headers: {
-        "Cookie": rawCookies2,
+        "Cookie": cookies2,
         "User-Agent": "okhttp/4.9.0",
       },
       redirect: "manual"
@@ -66,7 +99,7 @@ export async function loginCAS(username: string, password: string): Promise<CasL
     }
 
     if (!ticket) {
-      return { success: false, error: "Gagal mendapatkan Service Ticket dari CAS SSO Anteraja" };
+      return { success: false, error: "Kredensial tidak valid atau gagal memperoleh Service Ticket dari CAS Anteraja" };
     }
 
     // Step 4: Exchange Service Ticket for Bearer JWT at API Gateway
@@ -92,8 +125,15 @@ export async function loginCAS(username: string, password: string): Promise<CasL
     });
 
     const gatewayJson = await gatewayResp.json();
-    if (!gatewayJson || gatewayJson.status !== 200 || !gatewayJson.content) {
-      return { success: false, error: gatewayJson.info || "Gagal otentikasi API Gateway Anteraja" };
+    
+    // In Anteraja API convention, status 0 or 200 represents success
+    const isGatewaySuccess = gatewayJson && (gatewayJson.status === 0 || gatewayJson.status === 200) && gatewayJson.content;
+    
+    if (!isGatewaySuccess) {
+      const errorMsg = (gatewayJson?.info && gatewayJson.info !== "OK") 
+        ? gatewayJson.info 
+        : (gatewayJson?.error || "Gagal otentikasi API Gateway Anteraja");
+      return { success: false, error: errorMsg };
     }
 
     const content = gatewayJson.content;
@@ -101,8 +141,8 @@ export async function loginCAS(username: string, password: string): Promise<CasL
     const shopObj = agentObj.shop || {};
 
     const profile: UserProfile = {
-      username: content.nir || content.username || username,
-      name: content.name || agentObj.name || username,
+      username: content.nir || content.username || cleanUsername,
+      name: content.name || agentObj.name || cleanUsername,
       phone: content.phone || "",
       email: content.email || "",
       agentStaffId: content.agent_staff_id || content.id || "",
