@@ -8,15 +8,12 @@ import { UserProfile, ScanResult } from "@/lib/types";
 import { ErrorModal, ErrorDetail } from "@/components/ErrorModal";
 import { 
   CheckCircle2, 
-  AlertTriangle, 
-  XCircle, 
-  Package, 
+  AlertCircle, 
+  Copy,
+  Check,
   User, 
-  MapPin, 
-  DollarSign,
-  Clock,
-  ShieldAlert,
-  Copy
+  MapPin,
+  ArrowRight
 } from "lucide-react";
 
 export default function ScanPage() {
@@ -24,6 +21,7 @@ export default function ScanPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [errorDetail, setErrorDetail] = useState<ErrorDetail | null>(null);
+  const [copiedAwb, setCopiedAwb] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/session")
@@ -48,8 +46,8 @@ export default function ScanPage() {
 
       if (data.status === "ERROR") {
         setErrorDetail({
-          title: "Kendala Scan / Validasi AWB",
-          message: data.message || "Scan error",
+          title: "Scan Belum Berhasil",
+          message: data.message || "Gagal memproses nomor resi.",
           endpoint: "POST /api/scan",
           statusCode: resp.status,
           rawDetails: data,
@@ -60,14 +58,14 @@ export default function ScanPage() {
       const errObj = {
         awb,
         status: "ERROR" as const,
-        message: e.message || "Gagal menghubungi server scan"
+        message: "Tidak dapat terhubung ke server. Silakan coba lagi."
       };
       setResult(errObj);
       setErrorDetail({
-        title: "Kendala Jaringan Scan",
-        message: e.message || String(e),
+        title: "Kendala Koneksi",
+        message: "Koneksi ke server terputus.",
         endpoint: "POST /api/scan",
-        statusCode: "Network / Client Error",
+        statusCode: "Network Error",
         rawDetails: { error: e.message || String(e) },
         timestamp: new Date().toISOString()
       });
@@ -76,17 +74,23 @@ export default function ScanPage() {
     }
   };
 
+  const handleCopyAwb = (awbText: string) => {
+    navigator.clipboard.writeText(awbText);
+    setCopiedAwb(true);
+    setTimeout(() => setCopiedAwb(false), 2000);
+  };
+
   return (
     <div className="min-h-screen flex bg-slate-50">
       <Sidebar user={user} />
       <div className="flex-1 flex flex-col min-w-0">
         <Navbar user={user} />
 
-        <main className="p-6 md:p-8 max-w-5xl mx-auto w-full space-y-6">
+        <main className="p-6 md:p-8 max-w-3xl mx-auto w-full space-y-5">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Scan & Validasi Paket</h1>
-            <p className="text-xs text-slate-500 mt-1">
-              Verifikasi resi dropoff Anteraja, cek status klaim ganda, dan periksa detail pengiriman.
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Scan Paket Masuk</h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Scan barcode resi dropoff pelanggan untuk dimasukkan ke tasklist penyerahan.
             </p>
           </div>
 
@@ -95,158 +99,103 @@ export default function ScanPage() {
 
           {/* Scan Results */}
           {result && (
-            <div className="space-y-4 animate-in fade-in duration-300">
+            <div className="space-y-4 animate-in fade-in duration-200">
               {/* Status Header Alert */}
               {result.status === "SUCCESS" && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center space-x-3 text-emerald-800">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-600 flex-shrink-0" />
-                    <div>
-                      <span className="font-bold text-sm block">AWB Valid & Siap Diproses</span>
-                      <span className="text-xs text-emerald-700 font-mono">{result.message}</span>
+                <div className="p-5 bg-white border border-emerald-200 rounded-2xl shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 text-emerald-700">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                      <span className="font-bold text-sm">Paket Berhasil Diproses</span>
                     </div>
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 text-[11px] font-bold rounded-full">
+                      Masuk Tasklist
+                    </span>
                   </div>
-                  <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-mono font-bold rounded-full">
-                    AWB: {result.awb}
-                  </span>
+
+                  <div className="bg-slate-50 p-4 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block uppercase">Nomor Resi (AWB)</span>
+                      <span className="text-base font-mono font-bold text-slate-900">{result.awb}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyAwb(result.awb)}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 flex items-center space-x-1 transition-colors"
+                    >
+                      {copiedAwb ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedAwb ? "Tersalin" : "Salin"}</span>
+                    </button>
+                  </div>
+
+                  {/* Shipper & Receiver Summary */}
+                  {result.senderName && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                      <div className="p-3 bg-slate-50 rounded-xl">
+                        <div className="flex items-center space-x-1.5 font-bold text-slate-700 mb-1">
+                          <User className="w-3.5 h-3.5 text-red-500" />
+                          <span>Pengirim:</span>
+                        </div>
+                        <div className="font-semibold text-slate-900">{result.senderName}</div>
+                        <div className="text-slate-500 text-[11px] truncate">{result.senderAddress}</div>
+                      </div>
+
+                      <div className="p-3 bg-slate-50 rounded-xl">
+                        <div className="flex items-center space-x-1.5 font-bold text-slate-700 mb-1">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+                          <span>Penerima:</span>
+                        </div>
+                        <div className="font-semibold text-slate-900">{result.receiverName}</div>
+                        <div className="text-slate-500 text-[11px] truncate">{result.receiverAddress}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 flex justify-end">
+                    <a
+                      href="/tasklist"
+                      className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center space-x-1"
+                    >
+                      <span>Lihat di Tasklist</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
                 </div>
               )}
 
               {result.status === "ALREADY_CLAIMED" && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center space-x-3 text-amber-800">
-                    <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0" />
+                <div className="p-5 bg-white border border-amber-200 rounded-2xl shadow-xs space-y-3">
+                  <div className="flex items-center space-x-2 text-amber-800">
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     <div>
-                      <span className="font-bold text-sm block">Order Telah Diklaim Sebelumnya</span>
-                      <span className="text-xs text-amber-700 font-mono">{result.message}</span>
+                      <span className="font-bold text-sm block">Paket Sudah Pernah Di-scan</span>
+                      <span className="text-xs text-slate-500">Resi ini sudah tercatat sebelumnya di sistem.</span>
                     </div>
                   </div>
-                  <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-mono font-bold rounded-full">
-                    STATUS: CLAIMED
-                  </span>
                 </div>
               )}
 
               {result.status === "NOT_FOUND" && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-red-800">
-                  <div className="flex items-center space-x-3">
-                    <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-3">
+                  <div className="flex items-center space-x-2 text-slate-800">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
                     <div>
-                      <span className="font-bold text-sm block">AWB Tidak Ditemukan</span>
-                      <span className="text-xs text-red-700 font-mono">{result.message}</span>
+                      <span className="font-bold text-sm block">Nomor Resi Tidak Ditemukan</span>
+                      <span className="text-xs text-slate-500">Pastikan nomor resi Anteraja yang Anda masukkan sudah benar.</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setErrorDetail({
-                        title: "Detail AWB Tidak Ditemukan",
-                        message: result.message || "AWB Tidak Ditemukan",
-                        endpoint: `GET /maa-task/order/v2/search/${result.awb}`,
-                        statusCode: 404,
-                        rawDetails: result,
-                        timestamp: new Date().toISOString()
-                      });
-                    }}
-                    className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-xl font-semibold text-xs transition-colors flex items-center space-x-1"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Salin Kendala</span>
-                  </button>
                 </div>
               )}
 
               {result.status === "ERROR" && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center justify-between text-red-800">
-                  <div className="flex items-center space-x-3">
-                    <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+                <div className="p-5 bg-white border border-red-200 rounded-2xl shadow-xs space-y-3">
+                  <div className="flex items-center space-x-2 text-red-800">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
                     <div>
-                      <span className="font-bold text-sm block">Gagal Memproses AWB</span>
-                      <span className="text-xs text-red-700 font-mono">{result.message}</span>
+                      <span className="font-bold text-sm block">Paket Belum Dapat Diproses</span>
+                      <span className="text-xs text-slate-600">{result.message || "Silakan coba lagi beberapa saat lagi."}</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setErrorDetail({
-                        title: "Detail Error Scan AWB",
-                        message: result.message || "Error",
-                        endpoint: "POST /api/scan",
-                        statusCode: 500,
-                        rawDetails: result,
-                        timestamp: new Date().toISOString()
-                      });
-                    }}
-                    className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-xl font-semibold text-xs transition-colors flex items-center space-x-1"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Salin Kendala</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Rich Details Card */}
-              {result.senderName && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6">
-                  {/* General Info */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pb-6 border-b border-slate-100">
-                    <div>
-                      <span className="text-[11px] text-slate-400 block font-medium">Layanan</span>
-                      <span className="text-sm font-bold text-slate-900">{result.productCode || "REG"}</span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-400 block font-medium">Berat Paket</span>
-                      <span className="text-sm font-bold text-slate-900">{result.weight || 1.0} Kg</span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-400 block font-medium">Ongkir</span>
-                      <span className="text-sm font-bold text-red-600">
-                        Rp {(result.deliveryPrice || 0).toLocaleString("id-ID")}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-400 block font-medium">Metode Pembayaran</span>
-                      <span className="text-sm font-bold text-slate-900">{result.isCod ? "COD" : "NON-COD / LUNAS"}</span>
-                    </div>
-                  </div>
-
-                  {/* Shipper & Receiver Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Shipper */}
-                    <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100">
-                      <div className="flex items-center space-x-2 text-xs font-bold text-slate-800 mb-2">
-                        <User className="w-3.5 h-3.5 text-red-500" />
-                        <span>PENGIRIM</span>
-                      </div>
-                      <div className="text-sm font-bold text-slate-900">{result.senderName}</div>
-                      <div className="text-xs text-slate-500 font-mono mt-0.5">{result.senderPhone}</div>
-                      <div className="text-xs text-slate-600 mt-2 leading-relaxed">{result.senderAddress}</div>
-                      <div className="text-xs font-semibold text-slate-800 mt-1">{result.senderDistrict}</div>
-                    </div>
-
-                    {/* Receiver */}
-                    <div className="bg-slate-50/70 p-4 rounded-xl border border-slate-100">
-                      <div className="flex items-center space-x-2 text-xs font-bold text-slate-800 mb-2">
-                        <MapPin className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>PENERIMA</span>
-                      </div>
-                      <div className="text-sm font-bold text-slate-900">{result.receiverName}</div>
-                      <div className="text-xs text-slate-500 font-mono mt-0.5">{result.receiverPhone}</div>
-                      <div className="text-xs text-slate-600 mt-2 leading-relaxed">{result.receiverAddress}</div>
-                      <div className="text-xs font-semibold text-slate-800 mt-1">{result.receiverDistrict}</div>
-                    </div>
-                  </div>
-
-                  {/* Items list */}
-                  {result.itemDescription && (
-                    <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between text-xs">
-                      <div className="flex items-center space-x-2 text-slate-700 font-medium">
-                        <Package className="w-4 h-4 text-slate-400" />
-                        <span>Deskripsi Barang: <strong>{result.itemDescription}</strong></span>
-                      </div>
-                      <span className="text-slate-500 font-medium">Klien: {result.client || "Marketplace / Reguler"}</span>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
