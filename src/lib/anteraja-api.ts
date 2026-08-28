@@ -260,11 +260,17 @@ export async function calculateRates(
   length?: number,
   width?: number,
   height?: number
-): Promise<{ success: boolean; rates: TariffItem[]; message?: string }> {
+): Promise<{ success: boolean; rates: TariffItem[]; message?: string; raw?: any; upstreamStatus?: number }> {
   try {
+    const cleanOrigin = origin.trim();
+    const cleanDest = destination.trim();
+    if (!cleanOrigin || !cleanDest) {
+      return { success: false, rates: [], message: "Origin dan Destination district wajib diisi" };
+    }
+
     const params = new URLSearchParams({
-      origin,
-      destination,
+      origin: cleanOrigin,
+      destination: cleanDest,
       weight: String(weight || 1.0),
       length: String(length || 10.0),
       width: String(width || 10.0),
@@ -280,7 +286,7 @@ export async function calculateRates(
     });
 
     const json = await resp.json();
-    if ((json.status === 0 || json.status === 200) && Array.isArray(json.content)) {
+    if ((json.status === 0 || json.status === 200) && Array.isArray(json.content) && json.content.length > 0) {
       const mapped = json.content.map((item: any) => ({
         product_code: item.product_code || item.productCode || "REG",
         product_name: item.product_name || item.productName || "Anteraja Regular",
@@ -292,11 +298,12 @@ export async function calculateRates(
         productName: item.product_name || item.productName || "Anteraja Regular",
         deliveryPrice: item.delivery_price ?? item.deliveryPrice ?? 11500
       }));
-      return { success: true, rates: mapped };
+      return { success: true, rates: mapped, raw: json, upstreamStatus: resp.status };
     }
-    return { success: false, rates: [], message: json.info || "Gagal mengambil tarif" };
+    const errorMsg = json.info || "Gagal mengambil tarif dari Anteraja Gateway";
+    return { success: false, rates: [], message: errorMsg, raw: json, upstreamStatus: resp.status };
   } catch (err: any) {
-    return { success: false, rates: [], message: err.message };
+    return { success: false, rates: [], message: err.message, raw: { error: err.message } };
   }
 }
 
@@ -349,7 +356,7 @@ export async function createDropoffOrder(
   token: string,
   staffId: string,
   payload: CreateOrderPayload
-): Promise<{ success: boolean; taskCode?: string; waybillNo?: string; deliveryPrice?: number; message?: string }> {
+): Promise<{ success: boolean; taskCode?: string; waybillNo?: string; deliveryPrice?: number; message?: string; raw?: any; upstreamStatus?: number }> {
   try {
     const dropoffReq = [
       {
@@ -409,17 +416,23 @@ export async function createDropoffOrder(
     });
 
     const json = await resp.json();
-    if ((json.status === 0 || json.status === 200) && json.content) {
+    const taskObj = Array.isArray(json.content) ? json.content[0] : json.content;
+    const isSuccess = (json.status === 0 || json.status === 200) && taskObj && taskObj.task_code;
+
+    if (isSuccess) {
       return {
         success: true,
-        taskCode: json.content.task_code,
-        waybillNo: json.content.waybill_no || json.content.task_code,
-        deliveryPrice: json.content.total_delivery_price || json.content.delivery_price
+        taskCode: taskObj.task_code,
+        waybillNo: taskObj.waybill_no || taskObj.task_code,
+        deliveryPrice: taskObj.total_delivery_price ?? taskObj.delivery_price ?? 11500,
+        raw: json,
+        upstreamStatus: resp.status
       };
     }
-    return { success: false, message: json.info || "Gagal membuat task dropoff" };
+    const errorMsg = json.info || taskObj?.message || "Gagal membuat task dropoff";
+    return { success: false, message: errorMsg, raw: json, upstreamStatus: resp.status };
   } catch (err: any) {
-    return { success: false, message: err.message };
+    return { success: false, message: err.message, raw: { error: err.message } };
   }
 }
 

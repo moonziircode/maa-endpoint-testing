@@ -12,5 +12,6 @@ export async function POST(req: NextRequest) {
 
   const payload = await req.json();
   const result = await createDropoffOrder(session.token, session.user.agentStaffId, payload);
-  return NextResponse.json(result);
+  const httpStatus = result.success ? 200 : (result.upstreamStatus || 400);
+  return NextResponse.json(result, { status: httpStatus });
 }

@@ -25,5 +25,6 @@ export async function POST(req: NextRequest) {
     parseFloat(height) || 10.0
   );
 
-  return NextResponse.json(result);
+  const httpStatus = result.success ? 200 : (result.upstreamStatus || 400);
+  return NextResponse.json(result, { status: httpStatus });
 }
